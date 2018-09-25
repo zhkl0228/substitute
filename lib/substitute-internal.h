@@ -1,10 +1,13 @@
 #pragma once
 
+#include <os/log.h>
 #include <stdio.h>
 #include <string.h>
 
+#define LOG(...) os_log(OS_LOG_DEFAULT, __VA_ARGS__);
+
 #define substitute_panic(...) do { \
-    fprintf(stderr, __VA_ARGS__); \
+    LOG(__VA_ARGS__); \
     abort(); \
     __builtin_unreachable(); \
 } while(0)
