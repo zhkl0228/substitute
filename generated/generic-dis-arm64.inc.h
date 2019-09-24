@@ -207,7 +207,7 @@
             }
         }
         case 9: {
-            if ((op & 0xfffffc1f) == 0xd65f0000) {
+            if ((op & 0xfffffc1f) == 0xd65f0000 || (op & 0xfffffbff) == 0xd65f0bff) {
                 goto insn_GPR64_Rn_2_BLR; /* 0xd65f0000 | 0x000003e0 */
             } else {
                 return P(unidentified)(ctx);
