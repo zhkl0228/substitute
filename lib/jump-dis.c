@@ -54,14 +54,14 @@ static void jump_dis_add_to_queue(struct jump_dis_ctx *ctx, uint_tptr pc) {
     size_t diff = (pc - ctx->pc_patch_start) / MIN_INSN_SIZE;
     if (diff >= JUMP_ANALYSIS_MAX_INSNS) {
 #ifdef JUMP_DIS_VERBOSE
-        printf("jump-dis: not adding %llx - out of range\n",
+        fprintf(stderr, "jump-dis: not adding %llx - out of range\n",
                (unsigned long long) pc);
 #endif
         return;
     }
     if (ctx->seen_mask[diff / 8] & 1 << (diff % 8)) {
 #ifdef JUMP_DIS_VERBOSE
-        printf("jump-dis: not adding %llx - already seen\n",
+        fprintf(stderr, "jump-dis: not adding %llx - already seen\n",
                (unsigned long long) pc);
 #endif
         return;
@@ -103,7 +103,7 @@ void jump_dis_branch(struct jump_dis_ctx *ctx, uint_tptr dpc, int cc) {
         return;
     }
 #ifdef JUMP_DIS_VERBOSE
-    printf("jump-dis: enqueueing %llx\n", (unsigned long long) dpc);
+    fprintf(stderr, "jump-dis: enqueueing %llx\n", (unsigned long long) dpc);
 #endif
     jump_dis_add_to_queue(ctx, dpc);
     ctx->continue_after_this_insn = cc & (CC_CONDITIONAL | CC_CALL);
@@ -142,7 +142,7 @@ bool jump_dis_main(void *code_ptr, uint_tptr pc_patch_start,
         ctx.base.ptr = code_ptr + (ctx.base.pc - pc_patch_start);
         jump_dis_dis(&ctx);
 #ifdef JUMP_DIS_VERBOSE
-        printf("jump-dis: pc=%llx op=%08x size=%x bad=%d continue_after=%d\n",
+        fprintf(stderr, "jump-dis: pc=%llx op=%08x size=%x bad=%d continue_after=%d\n",
             (unsigned long long) ctx.base.pc,
 #if defined(TARGET_x86_64) || defined(TARGET_i386)
             0,

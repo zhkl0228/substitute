@@ -29,7 +29,7 @@ static NOINLINE UNUSED
 void transform_dis_data(struct transform_dis_ctx *ctx, unsigned o0, unsigned o1,
                         unsigned o2, unsigned o3, unsigned out_mask) {
 #ifdef TRANSFORM_DIS_VERBOSE
-    printf("transform_dis_data: (0x%llx) %x %x %x %x out_mask=%x\n",
+    fprintf(stderr, "transform_dis_data: (0x%llx) %x %x %x %x out_mask=%x\n",
            (unsigned long long) ctx->base.pc,
            o0, o1, o2, o3, out_mask);
 #endif
@@ -74,7 +74,7 @@ void transform_dis_data(struct transform_dis_ctx *ctx, unsigned o0, unsigned o1,
     int scratch = __builtin_ctz(~(in_regs | (1 << out_reg)));
 
 #ifdef TRANSFORM_DIS_VERBOSE
-    printf("transform_dis_data: in_regs=%x out_reg=%d pc=%x scratch=%d\n",
+    fprintf(stderr, "transform_dis_data: in_regs=%x out_reg=%d pc=%x scratch=%d\n",
            in_regs, out_reg, pc, scratch);
 #endif
 
@@ -116,7 +116,7 @@ void transform_dis_data(struct transform_dis_ctx *ctx, unsigned o0, unsigned o1,
     }
     ctx->base.modify = true;
 #ifdef TRANSFORM_DIS_VERBOSE
-    printf("transform_dis_data: => %x %x %x %x\n",
+    fprintf(stderr, "transform_dis_data: => %x %x %x %x\n",
            newval[0], newval[1], newval[2], newval[3]);
 #endif
 }
@@ -125,7 +125,7 @@ static NOINLINE UNUSED
 void transform_dis_pcrel(struct transform_dis_ctx *ctx, uint_tptr dpc,
                          struct arch_pcrel_info info) {
 #ifdef TRANSFORM_DIS_VERBOSE
-    printf("transform_dis_pcrel: (0x%llx) dpc=0x%llx reg=%x mode=%d\n",
+    fprintf(stderr, "transform_dis_pcrel: (0x%llx) dpc=0x%llx reg=%x mode=%d\n",
            (unsigned long long) ctx->base.pc,
            (unsigned long long) dpc,
            info.reg, info.load_mode);
@@ -152,7 +152,7 @@ void transform_dis_pcrel(struct transform_dis_ctx *ctx, uint_tptr dpc,
 static NOINLINE UNUSED
 void transform_dis_branch(struct transform_dis_ctx *ctx, uint_tptr dpc, int cc) {
 #ifdef TRANSFORM_DIS_VERBOSE
-    printf("transform_dis (0x%llx): branch => 0x%llx cc=%x\n",
+    fprintf(stderr, "transform_dis (0x%llx): branch => 0x%llx cc=%x\n",
            (unsigned long long) ctx->base.pc,
            (unsigned long long) dpc,
            cc);
