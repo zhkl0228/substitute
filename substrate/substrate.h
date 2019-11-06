@@ -80,6 +80,9 @@ __asm__("SubFindSymbol");
 void MSHookFunction(void *symbol, void *replace, void **result)
 __asm__("SubHookFunction");
 
+void MSHookMemory(void *target, const void *data, size_t size)
+__asm__("SubHookMemory");
+
 #ifdef __APPLE__
 void MSHookMessageEx(Class _class, SEL sel, IMP imp, IMP *result)
 __asm__("SubHookMessageEx");
