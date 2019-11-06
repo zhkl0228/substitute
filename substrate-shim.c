@@ -21,6 +21,11 @@ void MSHookMessageEx(Class _class, SEL sel, IMP imp, IMP *result) {
 		SubHookMessageEx(_class, sel, imp, result);
 }
 
+extern void SubHookMemory(void *target, const void *data, size_t size) __asm__("SubHookMemory");
+void MSHookMemory(void *target, const void *data, size_t size) {
+		SubHookMemory(target, data, size);
+}
+
 // i don't think anyone uses this function anymore, but it's here for completeness
 void MSHookClassPair(Class _class, Class hook, Class old) {
     unsigned int n_methods = 0;
