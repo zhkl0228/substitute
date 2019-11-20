@@ -1,6 +1,7 @@
 #include "substitute.h"
 #include "substitute-internal.h"
 #include "execmem.h"
+#include "ptrauth_helpers.h"
 #include <os/log.h>
 #include <mach-o/dyld.h>
 
@@ -51,8 +52,8 @@ void SubHookFunction(void *symbol, void *replace, void **result) {
     int ret = substitute_hook_functions(&hook, 1, NULL,
                                         SUBSTITUTE_NO_THREAD_SAFETY);
     if (ret) {
-        substitute_panic("SubHookFunction: substitute_hook_functions returned %s\n",
-                         substitute_strerror(ret));
+        substitute_panic("SubHookFunction: substitute_hook_functions returned %s (%p)\n",
+                         substitute_strerror(ret), make_sym_readable(symbol));
     }
 }
 #endif
