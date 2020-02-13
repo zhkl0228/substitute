@@ -372,6 +372,17 @@ struct substitute_image *substitute_open_image(const char *filename) {
 
             slide = dyld3_MachOLoaded_getSlide(image_header);
         }
+    } else if (dyld_sAllCacheImagesProxy == NULL) {
+        for(uint32_t i = 0; i < _dyld_image_count(); i++) {
+            const char *im_name = _dyld_get_image_name(i);
+            if (strcmp(im_name, filename) == 0) {
+                image_header = (const void *)_dyld_get_image_header(i);
+                slide = _dyld_get_image_vmaddr_slide(i);
+                break;
+            }
+        }
+        if (!image_header)
+            return NULL;
     } else if (ImageLoaderMegaDylib_isCacheHandle != NULL && ImageLoaderMegaDylib_isCacheHandle(*dyld_sAllCacheImagesProxy, image, &index, &mode)) {
         if (ImageLoaderMegaDylib_getSlide == NULL || ImageLoaderMegaDylib_getIndexedMachHeader == NULL)
             substitute_panic("couldn't find ImageLoaderMegaDylib methods\n");
