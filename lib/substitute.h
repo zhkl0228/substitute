@@ -169,7 +169,6 @@ typedef struct nlist substitute_sym;
 struct substitute_image {
 #ifdef __APPLE__
     intptr_t slide;
-    void *dlhandle;
     const void *image_header;
 #endif
     /* possibly private fields... */

@@ -355,8 +355,10 @@ struct substitute_image *substitute_open_image(const char *filename) {
     pthread_once(&dyld_inspect_once, inspect_dyld);
 
     void *dlhandle = dlopen(filename, RTLD_LAZY | RTLD_LOCAL | RTLD_NOLOAD);
-    if (!dlhandle)
+    if (!dlhandle) {
+        dlerror();
         return NULL;
+    }
 
     void* image = (void*)(((uintptr_t)dlhandle) & (-4));
     unsigned index;
@@ -381,8 +383,10 @@ struct substitute_image *substitute_open_image(const char *filename) {
                 break;
             }
         }
-        if (!image_header)
+        if (!image_header) {
+            dlclose(dlhandle);
             return NULL;
+        }
     } else if (ImageLoaderMegaDylib_isCacheHandle != NULL && ImageLoaderMegaDylib_isCacheHandle(*dyld_sAllCacheImagesProxy, image, &index, &mode)) {
         if (ImageLoaderMegaDylib_getSlide == NULL || ImageLoaderMegaDylib_getIndexedMachHeader == NULL)
             substitute_panic("couldn't find ImageLoaderMegaDylib methods\n");
@@ -393,18 +397,17 @@ struct substitute_image *substitute_open_image(const char *filename) {
       slide = ImageLoaderMachO_getSlide(image);
     }
 
+    dlclose(dlhandle);
     struct substitute_image *im = malloc(sizeof(*im));
     if (!im)
         return NULL;
     im->slide = slide;
-    im->dlhandle = dlhandle;
     im->image_header = image_header;
     return im;
 }
 
 EXPORT
 void substitute_close_image(struct substitute_image *im) {
-    dlclose(im->dlhandle); /* ignore errors */
     free(im);
 }
 
