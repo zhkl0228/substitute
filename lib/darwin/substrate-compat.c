@@ -45,7 +45,7 @@ EXPORT
 void SubHookFunction(void *symbol, void *replace, void **result)
     __asm__("SubHookFunction");
 void SubHookFunction(void *symbol, void *replace, void **result) {
-    if (symbol == NULL || replace == NULL || result == NULL) {
+    if (symbol == NULL || replace == NULL) {
         substitute_panic("SubHookFunction: called with a NULL pointer. Don't do that.\n");
     }
     struct substitute_function_hook hook = {symbol, replace, result};
