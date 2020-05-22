@@ -6,6 +6,10 @@
 
 #pragma once
 
+#if __has_include("substitute-internal.h")
+#include "substitute-internal.h"
+#endif
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>

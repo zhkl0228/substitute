@@ -2,12 +2,12 @@
  * sigaction!) */
 #define _XOPEN_SOURCE 700
 #define _DARWIN_C_SOURCE
+#include "substitute.h"
+#include "substitute-internal.h"
 #include "cbit/htab.h"
 #include "execmem.h"
 #include "darwin/manual-syscall.h"
 #include "darwin/mach-decls.h"
-#include "substitute.h"
-#include "substitute-internal.h"
 #include "ptrauth_helpers.h"
 #include <mach/mach.h>
 #ifndef __MigPackStructs

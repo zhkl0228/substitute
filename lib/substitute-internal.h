@@ -1,4 +1,9 @@
 #pragma once
+#include <Availability.h>
+#undef __TVOS_PROHIBITED
+#define __TVOS_PROHIBITED
+#undef __WATCHOS_PROHIBITED
+#define __WATCHOS_PROHIBITED
 
 #include <os/log.h>
 #include <stdio.h>
