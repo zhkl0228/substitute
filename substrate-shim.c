@@ -1,29 +1,37 @@
 #include <stdlib.h>
 #include <objc/runtime.h>
+#include "lib/substitute.h"
 
 extern void *SubGetImageByName(const char *filename) __asm__("SubGetImageByName");;
-void *MSGetImageByName(const char *filename) {
-	    return SubGetImageByName(filename);
+const void *MSGetImageByName(const char *filename) {
+    struct substitute_image *im = SubGetImageByName(filename);
+    const void *mh = im->image_header;
+    substitute_close_image(im);
+    return mh;
 }
 
+extern intptr_t _dyld_get_image_slide(const void *);
 extern void *SubFindSymbol(void *image, const char *name) __asm__("SubFindSymbol");
-void *MSFindSymbol(void *image, const char *name) {
-		return SubFindSymbol(image, name);
+const void *MSFindSymbol(void *image, const char *name) {
+    struct substitute_image im;
+    im.image_header = image;
+    im.slide = _dyld_get_image_slide(image);
+    return SubFindSymbol(&im, name);
 }
 
 extern void SubHookFunction(void *symbol, void *replace, void **result) __asm__("SubHookFunction");
 void MSHookFunction(void *symbol, void *replace, void **result) {
-		SubHookFunction(symbol, replace, result);
+    SubHookFunction(symbol, replace, result);
 }
 
 extern void SubHookMessageEx(Class _class, SEL sel, IMP imp, IMP *result) __asm__("SubHookMessageEx");
 void MSHookMessageEx(Class _class, SEL sel, IMP imp, IMP *result) {
-		SubHookMessageEx(_class, sel, imp, result);
+    SubHookMessageEx(_class, sel, imp, result);
 }
 
 extern void SubHookMemory(void *target, const void *data, size_t size) __asm__("SubHookMemory");
 void MSHookMemory(void *target, const void *data, size_t size) {
-		SubHookMemory(target, data, size);
+    SubHookMemory(target, data, size);
 }
 
 // i don't think anyone uses this function anymore, but it's here for completeness
