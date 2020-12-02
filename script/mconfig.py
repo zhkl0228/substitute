@@ -502,11 +502,17 @@ class Machine(object):
         return (self.triple.os is not None and 'darwin' in self.triple.os) or \
             (self.triple.triple == '' and os.path.exists('/System/Library/Frameworks'))
 
+    def is_tvos(self):
+        if not self.is_darwin():
+            return False
+        tc = self.darwin_target_conditionals()
+        return tc.get('TARGET_OS_TV')
+
     def is_ios(self): # memoized
         if not self.is_darwin():
             return False
         tc = self.darwin_target_conditionals()
-        return any(tc.get(flag) for flag in ['TARGET_OS_IOS', 'TARGET_OS_SIMULATOR', 'TARGET_OS_IPHONE', 'TARGET_IPHONE_SIMULATOR'])
+        return tc.get('TARGET_OS_IOS')
 
     def is_macosx(self):
         return self.is_darwin() and not self.is_ios()

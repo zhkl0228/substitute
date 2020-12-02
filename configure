@@ -66,6 +66,8 @@ if settings.enable_werror:
 flags = ['-O3']
 if settings.host_machine().is_ios():
     flags.append('-miphoneos-version-min=11.0')
+if settings.host_machine().is_tvos():
+    flags.append('-mappletvos-version-min=10.0')
 for i in ('cflags', 'ldflags'):
     settings.host[i] = flags + settings.host[i]
 settings.host.cflags = ['-fvisibility=hidden'] + settings.host.cflags
