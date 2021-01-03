@@ -6,13 +6,13 @@
 #include <mach-o/dyld.h>
 
 EXPORT
-void *SubGetImageByName(const char *filename) __asm__("SubGetImageByName");
+void *SubGetImageByName(const char *filename) __asm__("_MSGetImageByName");
 void *SubGetImageByName(const char *filename) {
     return substitute_open_image(filename);
 }
 
 EXPORT
-void *SubFindSymbol(void *image, const char *name) __asm__("SubFindSymbol");
+void *SubFindSymbol(void *image, const char *name) __asm__("_MSFindSymbol");
 void *SubFindSymbol(void *image, const char *name) {
     if (!image) {
         const char *s = "SubFindSymbol: 'any image' specified, which is incredibly slow - like, 2ms on a fast x86.  I'm going to do it since it seems to be somewhat common, but you should be ashamed of yourself.";
@@ -43,16 +43,16 @@ void *SubFindSymbol(void *image, const char *name) {
 #ifdef TARGET_DIS_SUPPORTED
 EXPORT
 void SubHookFunction(void *symbol, void *replace, void **result)
-    __asm__("SubHookFunction");
+    __asm__("_MSHookFunction");
 void SubHookFunction(void *symbol, void *replace, void **result) {
     if (symbol == NULL || replace == NULL) {
-        substitute_panic("SubHookFunction: called with a NULL pointer. Don't do that.\n");
+        substitute_info("SubHookFunction: called with a NULL pointer. Don't do that.\n");
     }
     struct substitute_function_hook hook = {symbol, replace, result};
     int ret = substitute_hook_functions(&hook, 1, NULL,
                                         SUBSTITUTE_NO_THREAD_SAFETY);
     if (ret) {
-        substitute_panic("SubHookFunction: substitute_hook_functions returned %s (%p)\n",
+        substitute_info("SubHookFunction: substitute_hook_functions returned %s (%p)\n",
                          substitute_strerror(ret), make_sym_readable(symbol));
     }
 }
@@ -60,32 +60,32 @@ void SubHookFunction(void *symbol, void *replace, void **result) {
 
 EXPORT
 void SubHookMemory(void *target, const void *data, size_t size)
-    __asm__("SubHookMemory");
+    __asm__("_MSHookMemory");
 
 void SubHookMemory(void *target, const void *data, size_t size) {
     if (size == 0) return;
 
     if (target == NULL || data == NULL) {
-        substitute_panic("SubHookMemory: called with a NULL pointer. Don't do that.\n");
+        substitute_info("SubHookMemory: called with a NULL pointer. Don't do that.\n");
     }
     struct execmem_foreign_write write = {target, data, size};
     int ret = execmem_foreign_write_with_pc_patch(&write, 1, NULL, NULL);
 
     if (ret) {
-        substitute_panic("SubHookMemory: execmem_foreign_write_with_pc_patch returned %s\n",
+        substitute_info("SubHookMemory: execmem_foreign_write_with_pc_patch returned %s\n",
                          substitute_strerror(ret));
     }
 }
 
 EXPORT
 void SubHookMessageEx(Class _class, SEL sel, IMP imp, IMP *result)
-    __asm__("SubHookMessageEx");
+    __asm__("_MSHookMessageEx");
 
 void SubHookMessageEx(Class _class, SEL sel, IMP imp, IMP *result) {
     int ret = substitute_hook_objc_message(_class, sel, imp, result, NULL);
     if (ret) {
         if (ret != SUBSTITUTE_ERR_NO_SUCH_SELECTOR) {
-            substitute_panic("SubHookMessageEx: substitute_hook_objc_message returned %s\n",
+            substitute_info("SubHookMessageEx: substitute_hook_objc_message returned %s\n",
             substitute_strerror(ret));
         }
         *result = nil;

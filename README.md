@@ -27,6 +27,12 @@ direct usage as a library):
 
     ./configure && make -j8
 
+To compile for iOS simulator (for using with [simject](https://github.com/angelXwind/simject)):
+
+    ./configure --xcode-sdk=iphonesimulator --xcode-archs=x86_64 && make -j8
+    mv out/libsubstitute.dylib out/CydiaSubstrate
+    codesign -f -s - out/CydiaSubstrate
+
 In other situations, `./configure --help` should be informative.  I'm using a
 build system I wrote from scratch, intended to be extensible for many use cases
 rather than project specific, and therefore somewhat complex; it's currently

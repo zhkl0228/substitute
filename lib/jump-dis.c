@@ -82,7 +82,9 @@ void jump_dis_data(UNUSED struct jump_dis_ctx *ctx,
 static INLINE UNUSED
 void jump_dis_pcrel(struct jump_dis_ctx *ctx, uint_tptr dpc,
                     UNUSED struct arch_pcrel_info info) {
+#if !defined(TARGET_x86_64) && !defined(TARGET_i386)
     if ((ctx->base.op & 0x9f000000) == 0x90000000) return; // ignore ADRP
+#endif
     ctx->bad_insn = dpc >= ctx->pc_patch_start && dpc < ctx->pc_patch_end;
 }
 

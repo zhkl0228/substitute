@@ -221,9 +221,11 @@ static void find_syms_raw(const void *hdr, intptr_t *restrict slide,
     const substitute_sym *cache_syms = NULL;
     const char *cache_strs = NULL;
     size_t ncache_syms = 0;
+#if !TARGET_OS_SIMULATOR
     if (addr_in_shared_cache(hdr))
         get_shared_cache_syms(hdr, &cache_syms, &cache_strs, &ncache_syms,
                               &mapping, &mapping_size);
+#endif
 
     /* note: no verification at all */
     const mach_header_x *mh = hdr;
