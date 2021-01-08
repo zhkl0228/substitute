@@ -13,6 +13,7 @@ const void *MSGetImageByName(const char *filename) {
 extern intptr_t _dyld_get_image_slide(const void *);
 extern void *SubFindSymbol(void *image, const char *name) __asm__("SubFindSymbol");
 const void *MSFindSymbol(void *image, const char *name) {
+    if (!image) return SubFindSymbol(NULL, name);
     struct substitute_image im;
     im.image_header = image;
     im.slide = _dyld_get_image_slide(image);
