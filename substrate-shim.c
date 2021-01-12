@@ -5,8 +5,11 @@
 extern void *SubGetImageByName(const char *filename) __asm__("SubGetImageByName");;
 const void *MSGetImageByName(const char *filename) {
     struct substitute_image *im = SubGetImageByName(filename);
-    const void *mh = im->image_header;
-    substitute_close_image(im);
+    const void *mh = NULL;
+    if (im) {
+        mh = im->image_header;
+        substitute_close_image(im);
+    }
     return mh;
 }
 
