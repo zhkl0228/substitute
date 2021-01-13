@@ -12,18 +12,8 @@
 #include "substitute-internal.h"
 #include "dyld_cache_format.h"
 
-const struct dyld_all_image_infos *__dyld_get_all_image_infos() {
-    struct task_dyld_info dyld_info;
-    mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
-    if (task_info(mach_task_self(), TASK_DYLD_INFO, (task_info_t)&dyld_info, &count) == KERN_SUCCESS) {
-        return (struct dyld_all_image_infos *)dyld_info.all_image_info_addr;
-    } else {
-        abort();
-    }
-}
-const struct dyld_all_image_infos *(*dyld_get_all_image_infos)();
-
 static pthread_once_t dyld_inspect_once = PTHREAD_ONCE_INIT;
+static pthread_once_t all_image_infos_once = PTHREAD_ONCE_INIT;
 /* and its fruits: */
 static uintptr_t (*ImageLoaderMachO_getSlide)(void *);
 static const struct mach_header *(*ImageLoaderMachO_machHeader)(void *);
@@ -43,6 +33,23 @@ static int s_cur_shared_cache_fd;
 static pthread_once_t s_open_cache_once = PTHREAD_ONCE_INIT;
 static struct dyld_cache_local_symbols_info s_cache_local_symbols_info;
 static struct dyld_cache_local_symbols_entry *s_cache_local_symbols_entries;
+static const struct dyld_all_image_infos *_aii;
+
+static void dyld_get_all_image_infos_once(void) {
+    struct task_dyld_info dyld_info;
+    mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_DYLD_INFO, (task_info_t)&dyld_info, &count) == KERN_SUCCESS) {
+        _aii = (struct dyld_all_image_infos *)dyld_info.all_image_info_addr;
+    } else {
+        substitute_panic("couldn't find dyld_all_image_infos");
+    }
+}
+
+static const struct dyld_all_image_infos *_aii;
+const struct dyld_all_image_infos *dyld_get_all_image_infos() {
+    pthread_once(&all_image_infos_once, dyld_get_all_image_infos_once);
+    return _aii;
+}
 
 static bool oscf_try_dir(const char *dir, const char *arch,
                          const struct dyld_cache_header *dch) {
@@ -409,17 +416,5 @@ int substitute_find_private_syms(struct substitute_image *im,
                                  size_t nsyms) {
     find_syms_raw(im->image_header, &im->slide, names, syms, nsyms);
     return SUBSTITUTE_OK;
-}
-
-
-__attribute__((constructor))
-void init(void) {
-    void *lib = dlopen("/usr/lib/system/libdyld.dylib", RTLD_LAZY);
-    if (lib != NULL)
-        dyld_get_all_image_infos = dlsym(lib, "_dyld_get_all_image_infos");
-
-    if (dyld_get_all_image_infos == NULL) {
-        dyld_get_all_image_infos = __dyld_get_all_image_infos;
-    }
 }
 #endif /* __APPLE__ */
