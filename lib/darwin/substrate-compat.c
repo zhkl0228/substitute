@@ -88,6 +88,6 @@ void SubHookMessageEx(Class _class, SEL sel, IMP imp, IMP *result) {
             substitute_panic("SubHookMessageEx: substitute_hook_objc_message returned %s\n",
             substitute_strerror(ret));
         }
-        *result = nil;
+        if (result) *result = nil;
     }
 }
