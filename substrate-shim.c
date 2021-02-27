@@ -10,13 +10,17 @@ extern void SubHookMemory(void *target, const void *data, size_t size);
 
 const void *MSGetImageByName(const char *filename) {
     struct substitute_image *im = SubGetImageByName(filename);
-    const void *mh = im->image_header;
-    substitute_close_image(im);
+    const void *mh = NULL;
+    if (im) {
+        mh = im->image_header;
+        substitute_close_image(im);
+    }
     return mh;
 }
 
 extern intptr_t _dyld_get_image_slide(const void *);
 const void *MSFindSymbol(void *image, const char *name) {
+    if (!image) return SubFindSymbol(NULL, name);
     struct substitute_image im;
     im.image_header = image;
     im.slide = _dyld_get_image_slide(image);
