@@ -70,15 +70,14 @@ if settings.host_machine().is_tvos():
     flags.append('-mappletvos-version-min=10.0')
 for i in ('cflags', 'ldflags'):
     settings.host[i] = flags + settings.host[i]
-settings.host.cflags = ['-fvisibility=hidden'] + settings.host.cflags
+settings.host.cflags = ['-fvisibility=hidden', '-g'] + settings.host.cflags
 settings.host.ldflags = ['-dead_strip'] + settings.host.ldflags
 
 # todo make overridable?
 cc_argv = c.cc.argv()
 if 'armv7' in cc_argv or 'arm64' in cc_argv or 'arm64e' in cc_argv:
     settings.modify_link = lambda env: (
-        env['cmds'].append(ldid_tool.argv() + ['-S'+settings.src+'/ent.plist', env['outs'][0]]),
-        env['ins'].append(settings.src+'/ent.plist')
+        env['cmds'].append(ldid_tool.argv() + ['-S', env['outs'][0]]),
     )
 
 settings.host.debug_info = True
