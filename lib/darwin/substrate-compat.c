@@ -51,7 +51,7 @@ void SubHookFunction(void *symbol, void *replace, void **result) {
     struct substitute_function_hook hook = {symbol, replace, result};
     int ret = substitute_hook_functions(&hook, 1, NULL,
                                         SUBSTITUTE_NO_THREAD_SAFETY);
-    if (ret) {
+    if (ret && ret != SUBSTITUTE_ERR_VM) {
         substitute_panic("SubHookFunction: substitute_hook_functions returned %s (%p)\n",
                          substitute_strerror(ret), make_sym_readable(symbol));
     }
