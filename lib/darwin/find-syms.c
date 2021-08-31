@@ -25,14 +25,20 @@ static void *(*ImageLoaderMegaDylib_isCacheHandle)(void*proxy, void* handle, uns
 static void **dyld_sAllCacheImagesProxy;
 /*dyld3 methods */
 static bool isUsingDyld3;
+static bool isUsingDyld4;
 static uintptr_t (*dyld3_MachOLoaded_getSlide)(const void *);
+static struct mach_header_64 *(*dyld4_Loader_loadAddress)(const void *dlhandle, const void *runtimeState);
+static void **dyld4_runtimeState_addr;
 
 
 static const struct dyld_cache_header *_Atomic s_cur_shared_cache_hdr;
+static struct dyld_cache_header l_s_cur_shared_cache_hdr;
 static int s_cur_shared_cache_fd;
 static pthread_once_t s_open_cache_once = PTHREAD_ONCE_INIT;
 static struct dyld_cache_local_symbols_info s_cache_local_symbols_info;
-static struct dyld_cache_local_symbols_entry *s_cache_local_symbols_entries;
+static bool dyld_cache_local_symbols_entry_is64;
+static struct dyld_cache_local_symbols_entry_32 *s_cache_local_symbols_entries_32;
+static struct dyld_cache_local_symbols_entry_64 *s_cache_local_symbols_entries_64;
 static const struct dyld_all_image_infos *_aii;
 
 static void dyld_get_all_image_infos_once(void) {
@@ -54,44 +60,74 @@ const struct dyld_all_image_infos *dyld_get_all_image_infos() {
 static bool oscf_try_dir(const char *dir, const char *arch,
                          const struct dyld_cache_header *dch) {
     char path[PATH_MAX];
-    if (snprintf(path, sizeof(path), "%s/%s%s", dir,
+    bool usingDetachedSymbols = true;
+    if (snprintf(path, sizeof(path), "%s/%s%s.symbols", dir,
                  DYLD_SHARED_CACHE_BASE_NAME, arch) >= sizeof(path))
         return false;
     int fd = open(path, O_RDONLY);
-    if (fd < 0)
-        return false;
+    if (fd < 0) {
+        usingDetachedSymbols = false;
+        if (snprintf(path, sizeof(path), "%s/%s%s", dir,
+                     DYLD_SHARED_CACHE_BASE_NAME, arch) >= sizeof(path))
+            return false;
+        fd = open(path, O_RDONLY);
+        if (fd < 0) {
+            return false;
+        }
+    }
     struct dyld_cache_header this_dch;
     if (read(fd, &this_dch, sizeof(this_dch)) != sizeof(this_dch))
         goto fail;
-    if (memcmp(this_dch.uuid, dch->uuid, 16) ||
-        this_dch.localSymbolsSize != dch->localSymbolsSize /* just in case */)
+    if (usingDetachedSymbols) {
+        if (memcmp(this_dch.uuid, dch->symbolSubCacheUUID, 16)) {
+            goto fail;
+        }
+        dyld_cache_local_symbols_entry_is64 = true;
+    } else {
+        if (memcmp(this_dch.uuid, dch->uuid, 16)) {
+            goto fail;
+        }
+    }
+    struct dyld_cache_header *lch = &l_s_cur_shared_cache_hdr;
+    if (pread(fd, lch, sizeof(*lch), 0) != sizeof(*lch)) {
         goto fail;
+    }
     struct dyld_cache_local_symbols_info *lsi = &s_cache_local_symbols_info;
-    if (pread(fd, lsi, sizeof(*lsi), dch->localSymbolsOffset) != sizeof(*lsi))
+    if (pread(fd, lsi, sizeof(*lsi), lch->localSymbolsOffset) != sizeof(*lsi)) {
         goto fail;
-    if (lsi->nlistOffset > dch->localSymbolsSize ||
-        lsi->nlistCount > (dch->localSymbolsSize - lsi->nlistOffset)
+    }
+    if (lsi->nlistOffset > lch->localSymbolsSize ||
+        lsi->nlistCount > (lch->localSymbolsSize - lsi->nlistOffset)
                            / sizeof(substitute_sym) ||
-        lsi->stringsOffset > dch->localSymbolsSize ||
-        lsi->stringsSize > dch->localSymbolsSize - lsi->stringsOffset) {
+        lsi->stringsOffset > lch->localSymbolsSize ||
+        lsi->stringsSize > lch->localSymbolsSize - lsi->stringsOffset) {
         /* bad format */
         goto fail;
     }
     uint32_t count = lsi->entriesCount;
-    if (count > 1000000)
+    if (count > 1000000) {
         goto fail;
-    struct dyld_cache_local_symbols_entry *lses;
-    size_t lses_size = count * sizeof(*lses);
-    if (!(lses = malloc(lses_size)))
+    }
+    size_t lses_size = count * (dyld_cache_local_symbols_entry_is64?sizeof(struct dyld_cache_local_symbols_entry_64):sizeof(struct dyld_cache_local_symbols_entry_32));
+    void *lses;
+
+    if (!(lses = malloc(lses_size))) {
         goto fail;
-    if (pread(fd, lses, lses_size, dch->localSymbolsOffset + lsi->entriesOffset)
+    }
+    if (pread(fd, lses, lses_size, lch->localSymbolsOffset + lsi->entriesOffset)
         != lses_size) {
         free(lses);
         goto fail;
     }
 
     s_cur_shared_cache_fd = fd;
-    s_cache_local_symbols_entries = lses;
+    if (dyld_cache_local_symbols_entry_is64) {
+        s_cache_local_symbols_entries_32 = NULL;
+        s_cache_local_symbols_entries_64 = lses;
+    } else {
+        s_cache_local_symbols_entries_32 = lses;
+        s_cache_local_symbols_entries_64 = NULL;
+    }
     return true;
 
 fail:
@@ -103,10 +139,13 @@ fail:
 static void open_shared_cache_file_once() {
     s_cur_shared_cache_fd = -1;
     const struct dyld_cache_header *dch = s_cur_shared_cache_hdr;
-    if (memcmp(dch->magic, "dyld_v1 ", 8))
+    if (memcmp(dch->magic, "dyld_v1 ", 8)) {
         return;
-    if (dch->localSymbolsSize < sizeof(struct dyld_cache_local_symbols_info))
-        return;
+    }
+    if (dch->localSymbolsSize < sizeof(struct dyld_cache_local_symbols_info)) {
+        // Probably ios15+ split cache
+        //return;
+    }
     const char *archp = &dch->magic[8];
     while (*archp == ' ')
         archp++;
@@ -146,32 +185,58 @@ static bool get_shared_cache_syms(const void *hdr,
                                   size_t *mapping_size_p) {
     pthread_once(&s_open_cache_once, open_shared_cache_file_once);
     int fd = s_cur_shared_cache_fd;
-    if (fd == -1)
+    if (fd == -1) {
         return false;
+    }
     const struct dyld_cache_header *dch = s_cur_shared_cache_hdr;
     const struct dyld_cache_local_symbols_info *lsi = &s_cache_local_symbols_info;
-    struct dyld_cache_local_symbols_entry lse;
-    for (uint32_t i = 0; i < lsi->entriesCount; i++) {
-        lse = s_cache_local_symbols_entries[i];
-        if (lse.dylibOffset == (uintptr_t) hdr - (uintptr_t) dch)
-            goto got_lse;
+    struct dyld_cache_local_symbols_entry_32 *lse_32;
+    struct dyld_cache_local_symbols_entry_64 *lse_64;
+    if (dyld_cache_local_symbols_entry_is64) {
+        for (uint32_t i = 0; i < lsi->entriesCount; i++) {
+            lse_64 = &s_cache_local_symbols_entries_64[i];
+            if (lse_64->dylibOffset == (uintptr_t) hdr - (uintptr_t) dch)
+                goto got_lse;
+        }
+    } else {
+        for (uint32_t i = 0; i < lsi->entriesCount; i++) {
+            lse_32 = &s_cache_local_symbols_entries_32[i];
+            if (lse_32->dylibOffset == (uintptr_t) hdr - (uintptr_t) dch)
+                goto got_lse;
+        }
     }
     return false;
 got_lse:
     /* map - we don't do this persistently to avoid wasting address space on
      * iOS (my random OS X 10.10 blob pushes 55MB) */
-    if (lse.nlistStartIndex > lsi->nlistCount ||
-        lsi->nlistCount - lse.nlistStartIndex < lse.nlistCount)
-        return false;
+    if (dyld_cache_local_symbols_entry_is64) {
+        if (lse_64->nlistStartIndex > lsi->nlistCount ||
+                lsi->nlistCount - lse_64->nlistStartIndex < lse_64->nlistCount) {
+            return false;
+        }
+    } else {
+        if (lse_32->nlistStartIndex > lsi->nlistCount ||
+                lsi->nlistCount - lse_32->nlistStartIndex < lse_32->nlistCount) {
+            return false;
+        }
+    }
 
+    struct dyld_cache_header *lch = &l_s_cur_shared_cache_hdr;
     char *ls_data;
-    if (!ul_mmap(fd, dch->localSymbolsOffset, dch->localSymbolsSize,
-                 &ls_data, mapping_p, mapping_size_p))
+    if (!ul_mmap(fd, lch->localSymbolsOffset, lch->localSymbolsSize,
+                 &ls_data, mapping_p, mapping_size_p)) {
         return false;
+    }
     const substitute_sym *syms = (void *) (ls_data + lsi->nlistOffset);
-    *syms_p = syms + lse.nlistStartIndex;
+
+    if (dyld_cache_local_symbols_entry_is64) {
+        *syms_p = syms + lse_64->nlistStartIndex;
+        *nsyms_p = lse_64->nlistCount;
+    } else {
+        *syms_p = syms + lse_32->nlistStartIndex;
+        *nsyms_p = lse_32->nlistCount;
+    }
     *strs_p = ls_data + lsi->stringsOffset;
-    *nsyms_p = lse.nlistCount;
     return true;
 }
 
@@ -192,19 +257,29 @@ static const struct dyld_cache_header *get_cur_shared_cache_hdr() {
 
 static bool addr_in_shared_cache(const void *addr) {
     const struct dyld_cache_header *dch = get_cur_shared_cache_hdr();
-    if (!dch)
+    if (!dch) {
         return false;
+    }
 
-    uint32_t mapping_count = dch->mappingCount;
-    const struct dyld_cache_mapping_info *mappings =
-        (void *) ((char *) dch + dch->mappingOffset);
-    intptr_t slide = (uintptr_t) dch - (uintptr_t) mappings[0].address;
+    if (dch->mappingOffset <= 0x118) {
+        uint32_t mapping_count = dch->mappingCount;
+        const struct dyld_cache_mapping_info *mappings =
+            (void *) ((char *) dch + dch->mappingOffset);
+        intptr_t slide = (uintptr_t) dch - (uintptr_t) mappings[0].address;
 
-    for (uint32_t i = 0; i < mapping_count; i++) {
-        const struct dyld_cache_mapping_info *mapping = &mappings[i];
-        uintptr_t diff = (uintptr_t) addr -
-                         ((uintptr_t) mapping->address + slide);
-        if (diff < mapping->size)
+        for (uint32_t i = 0; i < mapping_count; i++) {
+            const struct dyld_cache_mapping_info *mapping = &mappings[i];
+            uintptr_t diff = (uintptr_t) addr -
+                ((uintptr_t) mapping->address + slide);
+            if (diff < mapping->size)
+                return true;
+        }
+    } else {
+        uint32_t mapping_count = dch->mappingCount;
+        intptr_t slide = (uintptr_t) dch - dch->sharedRegionStart;
+        uintptr_t sharedRegionStart = (uintptr_t)dch;
+        uintptr_t sharedRegionEnd = (uintptr_t)dch + dch->sharedRegionSize;
+        if ((uintptr_t)addr >= sharedRegionStart && (uintptr_t)addr <= sharedRegionEnd)
             return true;
     }
     return false;
@@ -312,26 +387,6 @@ static void inspect_dyld() {
     const struct dyld_all_image_infos *aii = dyld_get_all_image_infos();
     const void *dyld_hdr = aii->dyldImageLoadAddress;
 
-    const char *names[6] = { "__ZNK16ImageLoaderMachO8getSlideEv",
-                             "__ZNK16ImageLoaderMachO10machHeaderEv",
-                             "__ZN4dyldL20sAllCacheImagesProxyE",
-                             "__ZN20ImageLoaderMegaDylib13isCacheHandleEPvPjPh",
-                             "__ZNK20ImageLoaderMegaDylib8getSlideEv",
-                             "__ZNK20ImageLoaderMegaDylib20getIndexedMachHeaderEj" };
-    void *syms[6];
-    intptr_t dyld_slide = -1;
-    find_syms_raw(dyld_hdr, &dyld_slide, names, syms, 6);
-    if (!syms[0] || !syms[1])
-        substitute_panic("couldn't find ImageLoader methods\n");
-    ImageLoaderMachO_getSlide = make_sym_callable(syms[0]);
-    ImageLoaderMachO_machHeader = make_sym_callable(syms[1]);
-    dyld_sAllCacheImagesProxy = syms[2];
-    ImageLoaderMegaDylib_isCacheHandle = make_sym_callable(syms[3]);
-    ImageLoaderMegaDylib_getSlide = make_sym_callable(syms[4]);
-    ImageLoaderMegaDylib_getIndexedMachHeader = make_sym_callable(syms[5]);
-
-    isUsingDyld3 = false;
-
     const void *libdyld_hdr = NULL;
     intptr_t libdyld_slide = 0;
     for(uint32_t i = 0; i < _dyld_image_count(); i++) {
@@ -341,20 +396,56 @@ static void inspect_dyld() {
             libdyld_slide = _dyld_get_image_vmaddr_slide(i);
         }
     }
+
+    const char *names[8] = { "__ZNK16ImageLoaderMachO8getSlideEv",
+                             "__ZNK16ImageLoaderMachO10machHeaderEv",
+                             "__ZN4dyldL20sAllCacheImagesProxyE",
+                             "__ZN20ImageLoaderMegaDylib13isCacheHandleEPvPjPh",
+                             "__ZNK20ImageLoaderMegaDylib8getSlideEv",
+                             "__ZNK20ImageLoaderMegaDylib20getIndexedMachHeaderEj",
+                             "__ZNK5dyld311MachOLoaded8getSlideEv",
+                             "__ZNK5dyld46Loader11loadAddressERNS_12RuntimeStateE",
+    };
+    void *syms[8];
+    intptr_t dyld_slide = -1;
+    find_syms_raw(dyld_hdr, &dyld_slide, names, syms, 8);
+    if (syms[6] && syms[7]) {
+        isUsingDyld4 = true;
+        dyld3_MachOLoaded_getSlide = make_sym_callable(syms[6]);
+        dyld4_Loader_loadAddress = make_sym_callable(syms[7]);
+    } else {
+        if (!syms[0] || !syms[1])
+            substitute_panic("couldn't find ImageLoader methods\n");
+        ImageLoaderMachO_getSlide = make_sym_callable(syms[0]);
+        ImageLoaderMachO_machHeader = make_sym_callable(syms[1]);
+        dyld_sAllCacheImagesProxy = syms[2];
+        ImageLoaderMegaDylib_isCacheHandle = make_sym_callable(syms[3]);
+        ImageLoaderMegaDylib_getSlide = make_sym_callable(syms[4]);
+        ImageLoaderMegaDylib_getIndexedMachHeader = make_sym_callable(syms[5]);
+    }
+
+
     if (libdyld_hdr == NULL){
         return;
     }
-    const char *libdyld_names[2] = {
+    const char *libdyld_names[3] = {
         "_gUseDyld3",
-        "__ZNK5dyld311MachOLoaded8getSlideEv"
+        "__ZNK5dyld311MachOLoaded8getSlideEv",
+        "__ZN5dyld45gDyldE",
     };
-    void *libdyld_syms[2];
-    find_syms_raw(libdyld_hdr, &libdyld_slide, libdyld_names, libdyld_syms, 2);
+    void *libdyld_syms[3];
+    find_syms_raw(libdyld_hdr, &libdyld_slide, libdyld_names, libdyld_syms, 3);
 
-    if (libdyld_syms[0]){
+    if (libdyld_syms[0]) {
         isUsingDyld3 = *(bool *)(libdyld_syms[0]);
-
+    }
+    if (libdyld_syms[1]) {
         dyld3_MachOLoaded_getSlide = make_sym_callable(libdyld_syms[1]);
+    }
+    if (libdyld_syms[2]) {
+        dyld4_runtimeState_addr = libdyld_syms[2];
+    } else if (isUsingDyld4) {
+        substitute_panic("couldn't find dyld4::runtimeState\n");
     }
 }
 
@@ -369,19 +460,26 @@ struct substitute_image *substitute_open_image(const char *filename) {
         return NULL;
     }
 
-    void* image = (void*)(((uintptr_t)dlhandle) & (-4));
+    void* image;
+    if (isUsingDyld4) {
+        image = dyld4_Loader_loadAddress((uint64_t)dlhandle>>1, *dyld4_runtimeState_addr);
+    } else if (isUsingDyld3) {
+        image = (void*)((((uintptr_t)dlhandle) & (-2)) << 5);
+    } else {
+        image = (void*)(((uintptr_t)dlhandle) & (-4));
+    }
     unsigned index;
     uint8_t mode;
     const void *image_header = NULL;
     intptr_t slide;
-    if (isUsingDyld3){
-        image = (void*)((((uintptr_t)dlhandle) & (-2)) << 5);
-
+    if (dyld3_MachOLoaded_getSlide != NULL && (isUsingDyld3 || isUsingDyld4)) {
         uint32_t magic = *((uint32_t *)image);
         if ((magic == MH_MAGIC || magic == MH_MAGIC_64) && dyld3_MachOLoaded_getSlide != NULL){
             image_header = (const void *)image;
 
             slide = dyld3_MachOLoaded_getSlide(image_header);
+        } else {
+            substitute_panic("image does not have magic, not image?");
         }
     } else if (ImageLoaderMegaDylib_isCacheHandle != NULL && dyld_sAllCacheImagesProxy != NULL &&
             ImageLoaderMegaDylib_isCacheHandle(*dyld_sAllCacheImagesProxy, image, &index, &mode)) {

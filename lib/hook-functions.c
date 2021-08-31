@@ -110,8 +110,9 @@ static int check_intro_trampoline(void **trampoline_ptr_p,
     ret = execmem_alloc_unsealed(start_address,
                                  &trampoline_ptr, &trampoline_size_left);
     if (!ret) {
+        /* Last chance so set force to fall back to MOVi64 if ADRP+ADD can't reach it still */
         *patch_size_p = jump_patch_size(pc, (uintptr_t) trampoline_ptr, arch,
-                                        false);
+                                        true);
         if (*patch_size_p != -1) {
             *trampoline_ptr_p = trampoline_ptr;
             *trampoline_size_left_p = trampoline_size_left;
