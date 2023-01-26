@@ -113,7 +113,7 @@ class Pending(object):
         try:
             return object.__getattribute__(self, attr)
         except AttributeError:
-            if attr is 'value':
+            if attr == 'value':
                 raise AttributeError
             return PendingAttribute(self, attr)
 
