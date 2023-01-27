@@ -757,7 +757,8 @@ class XcodeToolchain(object):
         return None
 
     def arch_flags(self):
-        return [flag for arch in self.archs for flag in ('-arch', arch)]
+        targetargs = ['-target', 'arm64-apple-ios-simulator'] if self.sdk_opt.value == 'iphonesimulator' and self.arch_opt.value == 'arm64' else []
+        return [flag for arch in self.archs for flag in ('-arch', arch)] + targetargs
 
     def find_tool(self, tool, failure_notes):
         # special cases
