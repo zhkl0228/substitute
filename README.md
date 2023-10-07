@@ -29,7 +29,7 @@ direct usage as a library):
 
 To compile for iOS simulator (for using with [simject](https://github.com/angelXwind/simject)):
 
-    ./configure --xcode-sdk=iphonesimulator --xcode-archs=x86_64 && make -j8
+    ./configure --xcode-sdk=iphonesimulator --xcode-archs=$(uname -m) && make -j8
     mv out/libsubstitute.dylib out/CydiaSubstrate
     codesign -f -s - out/CydiaSubstrate
 
